@@ -34,8 +34,9 @@ fn main() {
     let mqtt_client_id = client.get_client_id().expect("Failed to get MQTT client id");
     let mqtt_user_name = client.get_user_name().expect("Failed to get MQTT user name");
     let publish_topic = client.get_client_telemetry_publish_topic(Option::None).expect("Failed to get topic");
+    let ttl = 120;
 
-    let mqtt_password = get_password(&client, 3600, &shared_access_key);
+    let (mut mqtt_password, mut expiry_time) = get_password(&client, ttl, &shared_access_key);
 
     println!("Connection Information:");
     println!("\tHostname = {}", host_name);
@@ -53,18 +54,18 @@ fn main() {
         .persistence(mqtt::PersistenceType::None)
         .finalize();
 
-    let ssl_opts = mqtt::SslOptionsBuilder::new()
-        .trust_store(&certificate_name)
-        .finalize();
+    let mqtt_client = mqtt::Client::new(create_opts).expect("Failed to create MQTT client");
+
+    // let ssl_opts = mqtt::SslOptionsBuilder::new()
+    //     .trust_store(&certificate_name)
+    //     .finalize();
 
     let connect_opts = mqtt::ConnectOptionsBuilder::new()
-        .user_name(mqtt_user_name)
-        .password(mqtt_password)
-        .ssl_options(ssl_opts)
+        .user_name(&mqtt_user_name)
+        .password(&mqtt_password)
+        .ssl_options(mqtt::SslOptionsBuilder::new().trust_store(&certificate_name).finalize())
         .automatic_reconnect(time::Duration::new(1, 0), time::Duration::new(60 * 60, 0))
         .finalize();
-
-    let mqtt_client = mqtt::Client::new(create_opts).expect("Failed to create MQTT client");
 
     println!("Connecting to server");
 
@@ -77,7 +78,27 @@ fn main() {
 
     let mut message: mqtt::Message;
 
-    for i in 0..30 {
+    for i in 0..300 {
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("Could not get time").as_secs();
+        if expiry_time - now < ttl / 100 * 80 {
+            println!("Reauthenticating");
+            mqtt_client.disconnect(mqtt::DisconnectOptions::new()).expect("Failed to disconnect");
+            let parts = get_password(&client, ttl, &shared_access_key);
+            mqtt_password = parts.0;
+            expiry_time = parts.1;
+
+            let connect_opts = mqtt::ConnectOptionsBuilder::new()
+                .user_name(&mqtt_user_name)
+                .password(&mqtt_password)
+                .ssl_options(mqtt::SslOptionsBuilder::new().trust_store(&certificate_name).finalize())
+                .automatic_reconnect(time::Duration::new(1, 0), time::Duration::new(60 * 60, 0))
+                .finalize();
+
+            if let Err(e) = mqtt_client.connect(connect_opts) {
+                println!("Failed to connect to server: {}", e);
+                process::exit(4);
+            }
+        }
         message = mqtt::MessageBuilder::new()
             .topic(&publish_topic)
             .payload(format!("Rust Message #{}", i))
@@ -99,12 +120,12 @@ fn main() {
     println!("done");
 }
 
-fn get_password(client: &azrs::HubClient, ttl: u64, shared_access_key: &str) -> String {
+fn get_password(client: &azrs::HubClient, ttl: u64, shared_access_key: &str) -> (String, u64) {
     let epoch = SystemTime::now().duration_since(UNIX_EPOCH).expect("Could not get time").as_secs() + ttl as u64;
     let signature = client.get_sas_signature(epoch).expect("Failed to get SAS signature");
     let decoded_key = base64::decode(shared_access_key).expect("Shared access key is not valid Base 64");
     let sas = base64::encode(hmac_sha256::HMAC::mac(&signature, &decoded_key));
     let password = client.get_sas_password(epoch, &sas).expect("Failed to get password");
 
-    return password;
+    (password, epoch)
 }

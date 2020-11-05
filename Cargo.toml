@@ -8,7 +8,7 @@ edition = "2018"
 
 [dependencies]
 azure-embedded-sdk-sys = { git = "https://github.com/markrad/azure-embedded-sdk-sys.git", tag = "v0.1.0"  }
-azure-embedded-sdk-rs = { git = "https://github.com/markrad/azure-embedded-sdk-rs.git", tag = "v0.1.0"  }
+azure-embedded-sdk-rs = { git = "https://github.com/markrad/azure-embedded-sdk-rs.git", tag = "v0.2.0"  }
 paho-mqtt = "0.7.1"
 base64 = "0.12.3"
 hmac-sha256 = "0.1.6"
