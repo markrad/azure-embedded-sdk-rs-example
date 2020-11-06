@@ -11,7 +11,12 @@ use std::env;
 use std::process;
 use std::thread;
 
+unsafe extern "C" fn callback() {
+    process::abort();
+}
+
 fn main() {
+    azrs::precondition_failed_set_callback(Option::Some(callback));
 
     let connection_string = env::var("AZ_IOT_CONNECTION_STRING").expect("Connection string not found in environment");
     let certificate_name = env::var("AZ_IOT_ROOT_CERTIFICATE").expect("Root cerificate file name not found in environment");
@@ -77,8 +82,11 @@ fn main() {
     println!("Connected");
 
     let mut message: mqtt::Message;
+    let message_count = 300;
+    let mut message_tracker = 0;
+    let mut loop_counter = -1;
 
-    for i in 0..300 {
+    while message_tracker < message_count {
         let now = SystemTime::now().duration_since(UNIX_EPOCH).expect("Could not get time").as_secs();
         if expiry_time - now < ttl / 100 * 80 {
             println!("Reauthenticating");
@@ -99,20 +107,26 @@ fn main() {
                 process::exit(4);
             }
         }
-        message = mqtt::MessageBuilder::new()
-            .topic(&publish_topic)
-            .payload(format!("Rust Message #{}", i))
-            .qos(1)
-            .finalize();
-        println!("Sending message #{}", i);
-        match mqtt_client.publish(message) {
-            Ok(_n) => println!("Sent"),
-            Err(err) => {
-                println!("Send failed {}", err);
-                process::exit(4);
+
+        loop_counter += 1;
+
+        if loop_counter % 100 == 0 {
+            message = mqtt::MessageBuilder::new()
+                .topic(&publish_topic)
+                .payload(format!("Rust Message #{}", message_tracker))
+                .qos(1)
+                .finalize();
+            println!("Sending message #{}", message_tracker);
+            match mqtt_client.publish(message) {
+                Ok(_n) => println!("Sent"),
+                Err(err) => {
+                    println!("Send failed {}", err);
+                    process::exit(4);
+                }
             }
+            message_tracker += 1;
         }
-        thread::sleep(time::Duration::from_millis(1000));
+        thread::sleep(time::Duration::from_millis(10));
     }
 
     mqtt_client.disconnect(mqtt::DisconnectOptions::new()).expect("Failed to disconnect");
