@@ -4,11 +4,11 @@ extern crate hmac_sha256;
 extern crate paho_mqtt as mqtt;
 
 use regex::Regex;
+use std::time::{SystemTime, UNIX_EPOCH, Duration, Instant};
 use std::env;
 use std::process;
 use std::thread;
-use std::time;
-use std::time::{SystemTime, UNIX_EPOCH};
+
 
 unsafe extern "C" fn callback() {
     process::abort();
@@ -179,7 +179,7 @@ fn main() {
             }
             message_tracker += 1;
         }
-        thread::sleep(time::Duration::from_millis(10));
+        thread::sleep(Duration::from_millis(10));
     }
 
     mqtt_client
@@ -214,23 +214,31 @@ fn connect_to_server(
     mqtt_password: &str,
     certificate_name: &str,
 ) -> Result<i32, mqtt::MqttError> {
-    // TODO: Add retry logic
-    let connect_opts = mqtt::ConnectOptionsBuilder::new()
-        .user_name(mqtt_user_name)
-        .password(mqtt_password)
-        .ssl_options(
-            mqtt::SslOptionsBuilder::new()
-                .trust_store(&certificate_name)
-                .finalize(),
-        )
-        .automatic_reconnect(time::Duration::new(1, 0), time::Duration::new(60 * 60, 0))
-        .finalize();
-
     println!("Connecting to server");
+    let mut attempts:i16 = 0;
 
-    if let Err(e) = mqtt_client.connect(connect_opts) {
-        println!("Failed to connect to server: {}", e);
-        return Err(e);
+    while !mqtt_client.is_connected() {
+        let start = Instant::now();
+        attempts += 1;
+        let connect_opts = mqtt::ConnectOptionsBuilder::new()
+            .user_name(mqtt_user_name)
+            .password(mqtt_password)
+            .ssl_options(mqtt::SslOptionsBuilder::new().trust_store(&certificate_name).finalize())
+            .automatic_reconnect(Duration::new(1, 0), Duration::new(60 * 60, 0))
+            .finalize();
+
+        if let Err(e) = mqtt_client.connect(connect_opts) {
+            println!("Failed to connect to server: {}", e);
+            let wait = azrs::HubClient::calculate_retry_delay(
+                start.elapsed().as_millis() as i32,
+                attempts,
+                1000,
+                1000 * 60 * 10,
+                0
+            );
+            println!("Failed to connect - retry in {} milliseconds", wait);
+            thread::sleep(Duration::from_millis(wait as u64));
+        }
     }
 
     println!("Connected");

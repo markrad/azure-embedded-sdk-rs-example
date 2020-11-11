@@ -7,8 +7,8 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-#azure-embedded-sdk-rs = { git = "https://github.com/markrad/azure-embedded-sdk-rs.git", tag = "v0.2.2"  }
-azure-embedded-sdk-rs = { git = "https://github.com/markrad/azure-embedded-sdk-rs.git", rev = "5e0f91bec5130741dc636042838d6bdf4dd78b42" }
+azure-embedded-sdk-rs = { git = "https://github.com/markrad/azure-embedded-sdk-rs.git", rev = "8d9dc27a5b1f275eaac84df258ce632d04c1c5e6" }
+#azure-embedded-sdk-rs = { git = "https://github.com/markrad/azure-embedded-sdk-rs.git", tag = "v0.2.0"  }
 paho-mqtt = "0.7.1"
 base64 = "0.12.3"
 hmac-sha256 = "0.1.6"
