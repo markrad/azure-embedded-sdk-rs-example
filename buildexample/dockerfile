@@ -1,0 +1,12 @@
+FROM ubuntu:18.04
+
+RUN apt update && apt -y upgrade
+RUN apt install -y cmake build-essential libclang-9-dev curl git libssl-dev
+RUN groupadd rusty && useradd -ms /bin/bash -g rusty rusty
+USER rusty
+WORKDIR /home/rusty
+RUN curl https://sh.rustup.rs -sSf  | sh -s -- -y
+ENV PATH="/home/rusty/.cargo/bin:${PATH}"
+RUN git clone https://github.com/markrad/azure-embedded-sdk-rs-example
+WORKDIR azure-embedded-sdk-rs-example
+RUN cargo build
