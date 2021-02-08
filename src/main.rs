@@ -2,6 +2,8 @@ extern crate azure_embedded_sdk_rs as azrs;
 extern crate base64;
 extern crate hmac_sha256;
 extern crate paho_mqtt as mqtt;
+#[macro_use] extern crate log;
+extern crate env_logger;
 
 use regex::Regex;
 use std::time::{SystemTime, UNIX_EPOCH, Duration, Instant};
@@ -15,6 +17,7 @@ unsafe extern "C" fn callback() {
 }
 
 fn main() {
+    env_logger::init();
     azrs::precondition_failed_set_callback(Option::Some(callback));
 
     let connection_string =
@@ -42,7 +45,7 @@ fn main() {
         .map_or("", |m| m.as_str());
 
     if !std::path::Path::new(&certificate_name).exists() {
-        println!("Root certificate file does not exist");
+        log::error!("Root certificate file does not exist");
         process::exit(4);
     }
 
@@ -63,14 +66,14 @@ fn main() {
 
     let (mut mqtt_password, mut expiry_time) = get_password(&client, ttl, &shared_access_key);
 
-    println!("Connection Information:");
-    println!("\tHostname = {}", host_name);
-    println!("\tDevice Id = {}", device_id);
-    println!("\tRoot certificate file location = {}", certificate_name);
-    println!("\tMQTT client Id = {}", mqtt_client_id);
-    println!("\tMQTT user Name = {}", mqtt_user_name);
-    println!("\tMQTT password = {}", mqtt_password);
-    println!("\tMQTT telemetry publish topic = {}", publish_topic);
+    log::info!("Connection Information:");
+    log::info!("\tHostname = {}", host_name);
+    log::info!("\tDevice Id = {}", device_id);
+    log::info!("\tRoot certificate file location = {}", certificate_name);
+    log::info!("\tMQTT client Id = {}", mqtt_client_id);
+    log::info!("\tMQTT user Name = {}", mqtt_user_name);
+    log::info!("\tMQTT password = {}", mqtt_password);
+    log::info!("\tMQTT telemetry publish topic = {}", publish_topic);
 
     //let uri = "ssl://".to_string() + host_name + ":8883";
     let uri = format!(
@@ -97,7 +100,7 @@ fn main() {
     topic_subscribe(&mut mqtt_client).expect("Failed to subscribe");
 
     let mut message: mqtt::Message;
-    let message_count = 200;
+    let message_count = 2000;
     let mut message_tracker = 0;
     let mut loop_counter = -1;
 
@@ -108,12 +111,12 @@ fn main() {
             .as_secs();
         if !mqtt_client.is_connected() || expiry_time - now < ttl / 100 * 80 {
             if mqtt_client.is_connected() {
-                println!("Reauthenticating");
+                log::info!("Reauthenticating");
                 mqtt_client
                     .disconnect(mqtt::DisconnectOptions::new())
                     .expect("Failed to disconnect");
             } else {
-                println!("Reconnecting");
+                log::info!("Reconnecting");
             }
 
             let parts = get_password(&client, ttl, &shared_access_key);
@@ -129,7 +132,6 @@ fn main() {
             receiver = mqtt_client.start_consuming();
             topic_subscribe(&mut mqtt_client).expect("Failed to subscribe");
         }
-
         // Check for incoming messages
         match receiver.try_recv() {
             Ok(msg) => match msg {
@@ -169,11 +171,11 @@ fn main() {
                 .payload(format!("Rust Message #{}", message_tracker))
                 .qos(1)
                 .finalize();
-            println!("Sending message #{}", message_tracker);
+                log::info!("Sending message #{}", message_tracker);
             match mqtt_client.publish(message) {
-                Ok(_n) => println!("Sent"),
+                Ok(_n) => log::debug!("Sent"),
                 Err(err) => {
-                    println!("Send failed {}", err);
+                    log::error!("Send failed {}", err);
                     process::exit(4);
                 }
             }
@@ -186,7 +188,7 @@ fn main() {
         .disconnect(mqtt::DisconnectOptions::new())
         .expect("Failed to disconnect");
 
-    println!("done");
+        log::info!("done");
 }
 
 fn get_password(client: &azrs::HubClient, ttl: u64, shared_access_key: &str) -> (String, u64) {
@@ -214,7 +216,7 @@ fn connect_to_server(
     mqtt_password: &str,
     certificate_name: &str,
 ) -> Result<i32, mqtt::MqttError> {
-    println!("Connecting to server");
+    log::info!("Connecting to server");
     let mut attempts:i16 = 0;
 
     while !mqtt_client.is_connected() {
@@ -228,7 +230,7 @@ fn connect_to_server(
             .finalize();
 
         if let Err(e) = mqtt_client.connect(connect_opts) {
-            println!("Failed to connect to server: {}", e);
+            log::error!("Failed to connect to server: {}", e);
             let wait = azrs::HubClient::calculate_retry_delay(
                 start.elapsed().as_millis() as i32,
                 attempts,
@@ -236,12 +238,12 @@ fn connect_to_server(
                 1000 * 60 * 10,
                 0
             );
-            println!("Failed to connect - retry in {} milliseconds", wait);
+            log::warn!("Failed to connect - retry in {} milliseconds", wait);
             thread::sleep(Duration::from_millis(wait as u64));
         }
     }
 
-    println!("Connected");
+    log::info!("Connected");
     Ok(0)
 }
 
@@ -261,12 +263,12 @@ fn process_c2d_message(
     let props = &mut message_properties
         .into_array()
         .expect("Failed to convert properties to an array");
-    println!("topic={}", topic);
+        log::info!("topic={}", topic);
 
     for prop in props {
-        println!("k={};v={}", prop.0, prop.1);
+        log::info!("k={};v={}", prop.0, prop.1);
     }
-    println!(
+    log::warn!(
         "payload={}",
         std::str::from_utf8(message_payload).expect("Could not convert c2d payload to string")
     );
@@ -280,10 +282,10 @@ fn process_method_message(
     request_id: &str,
     message_payload: &[u8],
 ) {
-    println!("topic={}", topic);
-    println!("name={}", name);
-    println!("request_id={}", request_id);
-    println!(
+    log::info!("topic={}", topic);
+    log::info!("name={}", name);
+    log::info!("request_id={}", request_id);
+    log::warn!(
         "payload={}",
         std::str::from_utf8(message_payload).expect("Could not convert c2d payload to string")
     );
@@ -297,9 +299,9 @@ fn process_method_message(
         .qos(1)
         .finalize();
     match mqtt_client.publish(message) {
-        Ok(_n) => println!("Responded"),
+        Ok(_n) => log::info!("Responded"),
         Err(err) => {
-            println!("Send failed {}", err);
+            log::warn!("Send failed {}", err);
             process::exit(4);
         }
     }
