@@ -24,7 +24,9 @@ Running requires two environment variables. These are:
 * AZ_IOT_CONNECTION_STRING which should be set to the connection string of the device you are simulating
 * AZ_IOT_ROOT_CERTIFICATE which should be set to the full or relative path of the (currently) Baltimore CyberTrust root certificate. This file is included in the repository.
 
-With no changes, the example will send 200 messages to the IoT hub and exit.
+Logging is performed by env_logger. You might need a RUST_LOG environment variable to see the output.
+
+With no changes, the example will run forever.
 
 ## Implemented
 * Connect to an IoT hub using SAS authentication
