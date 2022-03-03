@@ -1,4 +1,4 @@
-FROM ubuntu:18.04
+FROM debian:11
 
 RUN apt update && apt -y upgrade
 RUN apt install -y cmake build-essential libclang-9-dev curl git libssl-dev
